@@ -7,39 +7,40 @@ function LoginPage({ setUser }) {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
-    const handleLogin = async (e) => {
-        e.preventDefault();
-        setError('');
-        setLoading(true);
+const handleLogin = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
 
-        try {
-            const response = await fetch('/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Accept: 'application/json',
-                    'X-CSRF-TOKEN': csrfToken,
-                },
-                body: JSON.stringify({
-                    username,
-                    password,
-                }),
-            });
+    try {
+        const response = await fetch('/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            body: JSON.stringify({
+                username,
+                password,
+            }),
+        });
 
-            const data = await response.json();
+        const data = await response.json();
 
-            if (!response.ok) {
-                setError('Username atau password salah.');
-                return;
-            }
-
-            setUser(data.user);
-        } catch (error) {
-            setError('Terjadi kesalahan saat login.');
-        } finally {
-            setLoading(false);
+        if (!response.ok) {
+            setError('Username atau password salah.');
+            return;
         }
-    };
+
+        localStorage.setItem('sekpim_login_success', 'true');
+        setUser(data.user);
+    } catch (error) {
+        setError('Terjadi kesalahan saat login.');
+    } finally {
+        setLoading(false);
+    }
+};
 
     return (
         <div
