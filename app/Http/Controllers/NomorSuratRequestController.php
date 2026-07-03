@@ -17,6 +17,10 @@ class NomorSuratRequestController extends Controller
             'user:id,name,username,unit,email',
             'kodePerihal:id,kode,nama_perihal',
             'kodePemilik:id,kode,nama_pemilik,unit',
+            'approvedBy:id,name,username,unit,email',
+            'rejectedBy:id,name,username,unit,email',
+            'revisionBy:id,name,username,unit,email',
+            'completedBy:id,name,username,unit,email',
         ])->latest();
 
         if (Auth::user()->unit !== 'sekpim') {
@@ -34,8 +38,11 @@ class NomorSuratRequestController extends Controller
             'kode_perihal_id' => ['required', 'exists:kode_perihals,id'],
             'kode_pemilik_id' => ['required', 'exists:kode_pemiliks,id'],
             'tanggal_surat' => ['required', 'date'],
+            'status_tanggal' => ['required', 'in:ondate,backdate'],
             'judul_surat' => ['required', 'string', 'max:255'],
             'tujuan_surat' => ['required', 'string', 'max:255'],
+            'nama_pic_unit_pemohon' => ['required', 'string', 'max:255'],
+            'penandatangan_surat' => ['required', 'string', 'max:255'],
             'keterangan' => ['nullable', 'string'],
             'file_dokumen' => [
                 'nullable',
@@ -60,9 +67,12 @@ class NomorSuratRequestController extends Controller
             'kode_perihal_id' => $validated['kode_perihal_id'],
             'kode_pemilik_id' => $validated['kode_pemilik_id'],
             'tanggal_surat' => $validated['tanggal_surat'],
+            'status_tanggal' => $validated['status_tanggal'],
             'tahun' => $tahun,
             'judul_surat' => $validated['judul_surat'],
             'tujuan_surat' => $validated['tujuan_surat'],
+            'nama_pic_unit_pemohon' => $validated['nama_pic_unit_pemohon'],
+            'penandatangan_surat' => $validated['penandatangan_surat'],
             'keterangan' => $validated['keterangan'] ?? null,
             'status' => 'pending',
             'file_dokumen' => $filePath,
@@ -132,6 +142,7 @@ class NomorSuratRequestController extends Controller
                 'user',
                 'kodePerihal',
                 'kodePemilik',
+                'approvedBy',
             ]);
         });
 
@@ -157,7 +168,7 @@ class NomorSuratRequestController extends Controller
 
         if ($requestSurat->status !== 'pending') {
             return response()->json([
-                'message' => 'Pengajuan ini sudah diproses.',
+                'message' => 'Pengajuan ini sudah diproses. Penolakan hanya bisa dilakukan saat status masih diajukan.',
             ], 422);
         }
 
@@ -174,68 +185,97 @@ class NomorSuratRequestController extends Controller
                 'user',
                 'kodePerihal',
                 'kodePemilik',
+                'rejectedBy',
             ]),
         ]);
     }
 
-    public function downloadDokumenAwal($id)
+    private function canAccessRequest(NomorSuratRequest $requestSurat): bool
     {
-        $requestSurat = NomorSuratRequest::findOrFail($id);
+        return Auth::user()->unit === 'sekpim'
+            || $requestSurat->user_id === Auth::id()
+            || optional($requestSurat->user)->unit === Auth::user()->unit;
+    }
 
-        if (
-            Auth::user()->unit !== 'sekpim' &&
-            $requestSurat->user_id !== Auth::id()
-        ) {
+    private function getFileResponse(NomorSuratRequest $requestSurat, ?string $filePath, string $mode = 'download')
+    {
+        if (! $this->canAccessRequest($requestSurat)) {
             return response()->json([
                 'message' => 'Akses ditolak.',
             ], 403);
         }
 
-        if (! $requestSurat->file_dokumen) {
+        if (! $filePath) {
             return response()->json([
-                'message' => 'Dokumen awal tidak ditemukan.',
+                'message' => 'Dokumen tidak ditemukan.',
             ], 404);
         }
 
-        $filePath = storage_path('app/public/' . $requestSurat->file_dokumen);
+        $fullPath = storage_path('app/public/' . $filePath);
 
-        if (! file_exists($filePath)) {
+        if (! file_exists($fullPath)) {
             return response()->json([
-                'message' => 'File dokumen awal tidak ditemukan di storage.',
+                'message' => 'File tidak ditemukan di storage.',
             ], 404);
         }
 
-        return response()->download($filePath);
+        $fileName = basename($fullPath);
+        $mimeType = mime_content_type($fullPath) ?: 'application/octet-stream';
+
+        if ($mode === 'preview') {
+            return response()->file($fullPath, [
+                'Content-Type' => $mimeType,
+                'Content-Disposition' => 'inline; filename="' . $fileName . '"',
+            ]);
+        }
+
+        return response()->download($fullPath, $fileName, [
+            'Content-Type' => $mimeType,
+        ]);
+    }
+
+    public function previewDokumenAwal($id)
+    {
+        $requestSurat = NomorSuratRequest::with('user')->findOrFail($id);
+
+        return $this->getFileResponse(
+            $requestSurat,
+            $requestSurat->file_dokumen,
+            'preview'
+        );
+    }
+
+    public function previewDokumenFinal($id)
+    {
+        $requestSurat = NomorSuratRequest::with('user')->findOrFail($id);
+
+        return $this->getFileResponse(
+            $requestSurat,
+            $requestSurat->file_dokumen_final,
+            'preview'
+        );
+    }
+
+    public function downloadDokumenAwal($id)
+    {
+        $requestSurat = NomorSuratRequest::with('user')->findOrFail($id);
+
+        return $this->getFileResponse(
+            $requestSurat,
+            $requestSurat->file_dokumen,
+            'download'
+        );
     }
 
     public function downloadDokumenFinal($id)
     {
-        $requestSurat = NomorSuratRequest::findOrFail($id);
+        $requestSurat = NomorSuratRequest::with('user')->findOrFail($id);
 
-        if (
-            Auth::user()->unit !== 'sekpim' &&
-            $requestSurat->user_id !== Auth::id()
-        ) {
-            return response()->json([
-                'message' => 'Akses ditolak.',
-            ], 403);
-        }
-
-        if (! $requestSurat->file_dokumen_final) {
-            return response()->json([
-                'message' => 'Dokumen final tidak ditemukan.',
-            ], 404);
-        }
-
-        $filePath = storage_path('app/public/' . $requestSurat->file_dokumen_final);
-
-        if (! file_exists($filePath)) {
-            return response()->json([
-                'message' => 'File dokumen final tidak ditemukan di storage.',
-            ], 404);
-        }
-
-        return response()->download($filePath);
+        return $this->getFileResponse(
+            $requestSurat,
+            $requestSurat->file_dokumen_final,
+            'download'
+        );
     }
 
     public function uploadFinal(Request $request, $id)
@@ -251,9 +291,9 @@ class NomorSuratRequestController extends Controller
                 ], 403);
             }
 
-            if ($requestSurat->status !== 'approved') {
+            if (! in_array($requestSurat->status, ['approved', 'revision'], true)) {
                 return response()->json([
-                    'message' => 'Dokumen final hanya dapat diupload setelah nomor surat disetujui.',
+                    'message' => 'Dokumen final hanya dapat diupload setelah nomor surat disetujui atau setelah dokumen final diminta revisi.',
                     'status_saat_ini' => $requestSurat->status,
                 ], 422);
             }
@@ -285,6 +325,9 @@ class NomorSuratRequestController extends Controller
                 'file_dokumen_final' => $filePath,
                 'final_uploaded_at' => now(),
                 'status' => 'final_submitted',
+                'revision_note' => null,
+                'revision_by' => null,
+                'revision_at' => null,
             ]);
 
             return response()->json([
@@ -303,6 +346,45 @@ class NomorSuratRequestController extends Controller
                 'line' => $e->getLine(),
             ], 500);
         }
+    }
+
+    public function revisionFinal(Request $request, $id)
+    {
+        if (Auth::user()->unit !== 'sekpim') {
+            return response()->json([
+                'message' => 'Akses ditolak. Hanya admin SEKPiM yang dapat meminta revisi dokumen final.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'revision_note' => ['required', 'string'],
+        ]);
+
+        $requestSurat = NomorSuratRequest::findOrFail($id);
+
+        if ($requestSurat->status !== 'final_submitted') {
+            return response()->json([
+                'message' => 'Revisi hanya dapat diberikan ketika dokumen final sudah dikirim oleh unit.',
+                'status_saat_ini' => $requestSurat->status,
+            ], 422);
+        }
+
+        $requestSurat->update([
+            'status' => 'revision',
+            'revision_note' => $validated['revision_note'],
+            'revision_by' => Auth::id(),
+            'revision_at' => now(),
+        ]);
+
+        return response()->json([
+            'message' => 'Dokumen final dikembalikan ke unit untuk revisi.',
+            'nomor_surat' => $requestSurat->fresh([
+                'user',
+                'kodePerihal',
+                'kodePemilik',
+                'revisionBy',
+            ]),
+        ]);
     }
 
     public function complete(Request $request, $id)
@@ -340,6 +422,7 @@ class NomorSuratRequestController extends Controller
                 'user',
                 'kodePerihal',
                 'kodePemilik',
+                'completedBy',
             ]),
         ]);
     }

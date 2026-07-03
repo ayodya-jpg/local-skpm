@@ -3,6 +3,7 @@ import {
     Building2,
     CheckCircle,
     FilePlus,
+    FileSpreadsheet,
     History,
     Home,
     KeyRound,
@@ -20,6 +21,7 @@ import RiwayatNomorSuratPage from '../pages/RiwayatNomorSuratPage';
 import ApprovalNomorSuratPage from '../pages/ApprovalNomorSuratPage';
 import KodePerihalPage from '../pages/KodePerihalPage';
 import KodePemilikPage from '../pages/KodePemilikPage';
+import LaporanPage from '../pages/LaporanPage';
 
 function DashboardLayout({ user, setUser, page, setPage }) {
     const handleLogout = async () => {
@@ -52,6 +54,7 @@ function DashboardLayout({ user, setUser, page, setPage }) {
         'ajukan-nomor': 'Ajukan Nomor Surat',
         'riwayat-nomor': 'Riwayat Pengajuan',
         'approval-nomor': 'Approval Pengajuan',
+        'laporan-surat-keluar': 'Laporan Surat Keluar',
         'kode-perihal': 'Kode Perihal',
         'kode-pemilik': 'Kode Pemilik',
         'user-management': 'User Management',
@@ -112,13 +115,25 @@ function DashboardLayout({ user, setUser, page, setPage }) {
                     />
 
                     {user.unit === 'sekpim' && (
-                        <>
-                            <MenuButton
-                                id="approval-nomor"
-                                icon={<CheckCircle size={18} />}
-                                label="Approval"
-                            />
+                        <MenuButton
+                            id="approval-nomor"
+                            icon={<CheckCircle size={18} />}
+                            label="Approval"
+                        />
+                    )}
 
+                    <p className="text-[11px] uppercase tracking-wider text-white/50 font-bold px-4 pt-4">
+                        Laporan
+                    </p>
+
+                    <MenuButton
+                        id="laporan-surat-keluar"
+                        icon={<FileSpreadsheet size={18} />}
+                        label="Laporan Surat Keluar"
+                    />
+
+                    {user.unit === 'sekpim' && (
+                        <>
                             <p className="text-[11px] uppercase tracking-wider text-white/50 font-bold px-4 pt-4">
                                 Master Data
                             </p>
@@ -154,6 +169,7 @@ function DashboardLayout({ user, setUser, page, setPage }) {
                             <p className="text-sm font-semibold leading-tight truncate">
                                 {user.name}
                             </p>
+
                             <p className="text-xs text-white/70 capitalize">
                                 Unit {user.unit}
                             </p>
@@ -193,6 +209,8 @@ function DashboardLayout({ user, setUser, page, setPage }) {
                     {page === 'approval-nomor' && user.unit === 'sekpim' && (
                         <ApprovalNomorSuratPage />
                     )}
+
+                    {page === 'laporan-surat-keluar' && <LaporanPage />}
 
                     {page === 'kode-perihal' && user.unit === 'sekpim' && (
                         <KodePerihalPage />

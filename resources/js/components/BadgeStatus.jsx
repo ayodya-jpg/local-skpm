@@ -5,15 +5,17 @@ function BadgeStatus({ status }) {
         pending: 'bg-yellow-100 text-yellow-700',
         approved: 'bg-green-100 text-green-700',
         final_submitted: 'bg-blue-100 text-blue-700',
+        revision: 'bg-orange-100 text-orange-700',
         completed: 'bg-slate-200 text-slate-700',
         rejected: 'bg-red-100 text-red-700',
     };
 
     const statusText = {
-        pending: 'Menunggu',
-        approved: 'Disetujui',
-        final_submitted: 'Dokumen Final Dikirim',
-        completed: 'Selesai',
+        pending: 'Diajukan',
+        approved: 'Nomor Disetujui',
+        final_submitted: 'Menunggu Verifikasi Final',
+        revision: 'Perlu Revisi Final',
+        completed: 'Selesai / Closed',
         rejected: 'Ditolak',
     };
 
