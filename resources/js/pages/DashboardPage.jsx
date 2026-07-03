@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
 import {
     ArrowLeft,
+    BarChart3,
     Building2,
     CheckCircle,
     Clock,
@@ -10,7 +11,10 @@ import {
     ExternalLink,
     FileText,
     RefreshCcw,
+    Search,
     ShieldAlert,
+    Sparkles,
+    TrendingUp,
     Upload,
 } from 'lucide-react';
 
@@ -25,6 +29,7 @@ function DashboardPage() {
     const [filter, setFilter] = useState({
         bulan: String(currentDate.getMonth() + 1),
         tahun: String(currentDate.getFullYear()),
+        search: '',
     });
 
     const [units, setUnits] = useState([]);
@@ -50,7 +55,7 @@ function DashboardPage() {
         } else {
             fetchUnits(true);
         }
-    }, [filter]);
+    }, [filter.bulan, filter.tahun]);
 
     const fetchInitialData = async () => {
         try {
@@ -336,73 +341,132 @@ function DashboardPage() {
         currentDate.getFullYear() + 1,
     ];
 
+    const filteredUnits = useMemo(() => {
+        const keyword = filter.search.toLowerCase();
+
+        if (!keyword) return units;
+
+        return units.filter((item) => {
+            return (
+                String(item.unit || '').toLowerCase().includes(keyword) ||
+                String(item.nama_unit || '').toLowerCase().includes(keyword)
+            );
+        });
+    }, [units, filter.search]);
+
+    const globalStats = useMemo(() => {
+        const totalPengajuan = units.reduce((sum, item) => sum + Number(item.total_pengajuan || 0), 0);
+        const totalReview = units.reduce((sum, item) => sum + Number(item.menunggu_tindak_lanjut || 0), 0);
+        const totalCompleted = units.reduce((sum, item) => sum + Number(item.total_completed || 0), 0);
+        const totalUnits = units.length;
+
+        const progress = totalPengajuan > 0
+            ? Math.round((totalCompleted / totalPengajuan) * 100)
+            : 0;
+
+        return {
+            totalPengajuan,
+            totalReview,
+            totalCompleted,
+            totalUnits,
+            progress,
+        };
+    }, [units]);
+
     if (loading) {
-        return (
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6">
-                <p className="text-slate-500">Memuat dashboard...</p>
-            </div>
-        );
+        return <DashboardSkeleton />;
     }
 
     return (
-        <div className="space-y-6">
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 md:p-8">
-                <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-6">
+        <div className="space-y-7 no-scrollbar">
+            <DashboardHero
+                user={user}
+                selectedUnit={selectedUnit}
+                lastUpdated={lastUpdated}
+                formatTime={formatTime}
+                onBack={handleBackToUnits}
+                stats={globalStats}
+            />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+                <ExecutiveStatCard
+                    title="Total Pengajuan"
+                    value={selectedUnit ? detail?.stats?.total_pengajuan || 0 : globalStats.totalPengajuan}
+                    description="Seluruh pengajuan pada filter aktif"
+                    icon={<FileText size={24} />}
+                    tone="blue"
+                />
+
+                <ExecutiveStatCard
+                    title="Review"
+                    value={
+                        selectedUnit
+                            ? (detail?.stats?.total_pending || 0) +
+                              (detail?.stats?.total_final_submitted || 0) +
+                              (detail?.stats?.total_revision || 0)
+                            : globalStats.totalReview
+                    }
+                    description="Butuh tindak lanjut"
+                    icon={<Clock size={24} />}
+                    tone="yellow"
+                />
+
+                <ExecutiveStatCard
+                    title="Selesai"
+                    value={selectedUnit ? detail?.stats?.total_completed || 0 : globalStats.totalCompleted}
+                    description="Sudah closed"
+                    icon={<CheckCircle size={24} />}
+                    tone="green"
+                />
+
+                <ExecutiveStatCard
+                    title={selectedUnit ? 'Progress Unit' : 'Total Unit'}
+                    value={selectedUnit ? `${calculateDetailProgress(detail)}%` : globalStats.totalUnits}
+                    description={selectedUnit ? 'Persentase penyelesaian' : 'Unit dengan pengajuan'}
+                    icon={<TrendingUp size={24} />}
+                    tone="red"
+                />
+            </div>
+
+            <div className="bg-white/90 backdrop-blur-xl border border-white shadow-sm rounded-[28px] p-5 md:p-6">
+                <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5">
                     <div>
-                        <div className="flex items-center gap-3">
-                            {selectedUnit ? (
-                                <button
-                                    type="button"
-                                    onClick={handleBackToUnits}
-                                    className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
-                                >
-                                    <ArrowLeft size={18} />
-                                </button>
-                            ) : null}
+                        <h3 className="text-lg font-black text-slate-950">
+                            Filter Dashboard
+                        </h3>
 
-                            <div>
-                                <h2 className="text-2xl font-bold text-slate-950">
-                                    {selectedUnit
-                                        ? `Dashboard Unit ${String(selectedUnit).toUpperCase()}`
-                                        : 'Dashboard Unit'}
-                                </h2>
-
-                                <p className="text-slate-500 mt-2">
-                                    {selectedUnit
-                                        ? 'Klik judul atau nomor surat untuk melihat detail pengajuan. Dokumen dapat dipreview terlebih dahulu sebelum diunduh.'
-                                        : user?.unit === 'sekpim'
-                                            ? 'Pilih salah satu unit untuk melihat detail dashboard pengajuan nomor surat.'
-                                            : 'Anda dapat melihat ringkasan semua unit, tetapi hanya bisa membuka detail unit sendiri.'}
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="mt-4 flex flex-wrap items-center gap-3">
-                            <span
-                                className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold ${
-                                    user?.unit === 'sekpim'
-                                        ? 'bg-red-100 text-red-700'
-                                        : 'bg-blue-100 text-blue-700'
-                                }`}
-                            >
-                                {user?.unit === 'sekpim'
-                                    ? 'Mode Admin SEKPiM'
-                                    : `Mode Unit ${user?.unit || '-'}`}
-                            </span>
-
-                            <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-green-50 text-green-700">
-                                Ringkasan semua unit aktif
-                            </span>
-
-                            <span className="text-xs text-slate-400">
-                                Update terakhir: {formatTime(lastUpdated)}
-                            </span>
-                        </div>
+                        <p className="text-sm text-slate-500 mt-1">
+                            Pilih periode dan cari unit untuk mempercepat monitoring data.
+                        </p>
                     </div>
 
-                    <div className="flex flex-col lg:flex-row lg:items-end gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 w-full xl:w-auto">
+                        {!selectedUnit ? (
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-black text-slate-500 mb-2">
+                                    Cari Unit
+                                </label>
+
+                                <div className="relative">
+                                    <Search
+                                        size={17}
+                                        className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                                    />
+
+                                    <input
+                                        type="text"
+                                        name="search"
+                                        value={filter.search}
+                                        onChange={handleFilterChange}
+                                        className="w-full xl:w-72 border border-slate-200 rounded-2xl pl-11 pr-4 py-3 text-sm font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                                        placeholder="Cari nama unit..."
+                                    />
+                                </div>
+                            </div>
+                        ) : null}
+
                         <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-2">
+                            <label className="block text-xs font-black text-slate-500 mb-2">
                                 Bulan
                             </label>
 
@@ -410,7 +474,7 @@ function DashboardPage() {
                                 name="bulan"
                                 value={filter.bulan}
                                 onChange={handleFilterChange}
-                                className="w-full lg:w-44 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                                className="w-full border border-slate-200 rounded-2xl px-4 py-3 text-sm font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-red-500"
                             >
                                 <option value="all">Semua Bulan</option>
                                 <option value="1">Januari</option>
@@ -429,7 +493,7 @@ function DashboardPage() {
                         </div>
 
                         <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-2">
+                            <label className="block text-xs font-black text-slate-500 mb-2">
                                 Tahun
                             </label>
 
@@ -437,9 +501,10 @@ function DashboardPage() {
                                 name="tahun"
                                 value={filter.tahun}
                                 onChange={handleFilterChange}
-                                className="w-full lg:w-36 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                                className="w-full border border-slate-200 rounded-2xl px-4 py-3 text-sm font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-red-500"
                             >
                                 <option value="all">Semua Tahun</option>
+
                                 {years.map((year) => (
                                     <option key={year} value={String(year)}>
                                         {year}
@@ -448,25 +513,27 @@ function DashboardPage() {
                             </select>
                         </div>
 
-                        <button
-                            type="button"
-                            onClick={handleRefresh}
-                            disabled={refreshing || detailLoading}
-                            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold transition disabled:opacity-60"
-                        >
-                            <RefreshCcw
-                                size={16}
-                                className={refreshing || detailLoading ? 'animate-spin' : ''}
-                            />
-                            Refresh
-                        </button>
+                        <div className="flex items-end">
+                            <button
+                                type="button"
+                                onClick={handleRefresh}
+                                disabled={refreshing || detailLoading}
+                                className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-black transition disabled:opacity-60"
+                            >
+                                <RefreshCcw
+                                    size={16}
+                                    className={refreshing || detailLoading ? 'animate-spin' : ''}
+                                />
+                                Refresh
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
 
             {!selectedUnit ? (
                 <UnitDashboardList
-                    units={units}
+                    units={filteredUnits}
                     user={user}
                     canOpenUnit={canOpenUnit}
                     onOpenUnit={fetchUnitDetail}
@@ -504,20 +571,99 @@ function DashboardPage() {
     );
 }
 
+function DashboardHero({
+    user,
+    selectedUnit,
+    lastUpdated,
+    formatTime,
+    onBack,
+    stats,
+}) {
+    return (
+        <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-[#d71920] via-[#a90f1b] to-[#210711] text-white shadow-xl">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.24),_transparent_32%)]"></div>
+            <div className="absolute -right-20 -bottom-20 w-72 h-72 bg-white/10 rounded-full blur-3xl"></div>
+
+            <div className="relative p-6 md:p-8">
+                <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6">
+                    <div>
+                        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 border border-white/20 text-xs font-black">
+                            <Sparkles size={14} />
+                            {user?.unit === 'sekpim' ? 'Mode Admin SEKPiM' : `Mode Unit ${String(user?.unit || '-').toUpperCase()}`}
+                        </div>
+
+                        <h2 className="text-2xl md:text-4xl font-black tracking-tight mt-5">
+                            {selectedUnit
+                                ? `Dashboard Unit ${String(selectedUnit).toUpperCase()}`
+                                : `Selamat datang, ${user?.name || 'User'}`}
+                        </h2>
+
+                        <p className="text-white/75 mt-3 max-w-2xl leading-relaxed">
+                            {selectedUnit
+                                ? 'Pantau detail pengajuan, dokumen, dan tindak lanjut dari unit yang dipilih.'
+                                : 'Pantau performa pengajuan nomor surat seluruh unit dalam satu dashboard yang ringkas dan mudah dipahami.'}
+                        </p>
+
+                        <div className="flex flex-wrap items-center gap-3 mt-5">
+                            {selectedUnit ? (
+                                <button
+                                    type="button"
+                                    onClick={onBack}
+                                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white text-[#c4121a] hover:bg-red-50 font-black text-sm transition"
+                                >
+                                    <ArrowLeft size={16} />
+                                    Kembali ke Semua Unit
+                                </button>
+                            ) : null}
+
+                            <span className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white/10 border border-white/15 text-sm font-bold">
+                                Update terakhir: {formatTime(lastUpdated)}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="bg-white/10 border border-white/15 rounded-[28px] p-5 min-w-[260px] backdrop-blur-xl">
+                        <p className="text-sm text-white/70 font-semibold">
+                            Progress Close
+                        </p>
+
+                        <div className="flex items-end gap-2 mt-2">
+                            <h3 className="text-5xl font-black">
+                                {stats.progress || 0}%
+                            </h3>
+
+                            <p className="text-sm text-white/60 mb-2">
+                                selesai
+                            </p>
+                        </div>
+
+                        <div className="h-3 bg-white/15 rounded-full overflow-hidden mt-4">
+                            <div
+                                className="h-full bg-white rounded-full transition-all"
+                                style={{
+                                    width: `${stats.progress || 0}%`,
+                                }}
+                            />
+                        </div>
+
+                        <p className="text-xs text-white/60 mt-3">
+                            Berdasarkan total pengajuan pada filter aktif.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function UnitDashboardList({ units, user, canOpenUnit, onOpenUnit }) {
     if (!units.length) {
         return (
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8 text-center">
-                <Building2 size={42} className="mx-auto text-slate-300" />
-
-                <h3 className="text-lg font-bold text-slate-800 mt-4">
-                    Belum ada data pengajuan
-                </h3>
-
-                <p className="text-slate-500 mt-2">
-                    Data unit akan muncul setelah ada pengajuan nomor surat.
-                </p>
-            </div>
+            <EmptyState
+                icon={<Building2 size={44} />}
+                title="Belum ada data unit"
+                description="Data unit akan muncul setelah ada pengajuan nomor surat pada periode yang dipilih."
+            />
         );
     }
 
@@ -526,6 +672,9 @@ function UnitDashboardList({ units, user, canOpenUnit, onOpenUnit }) {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                 {units.map((unit) => {
                     const allowed = canOpenUnit(unit);
+                    const progress = unit.total_pengajuan > 0
+                        ? Math.round((unit.total_completed / unit.total_pengajuan) * 100)
+                        : 0;
 
                     return (
                         <button
@@ -536,23 +685,27 @@ function UnitDashboardList({ units, user, canOpenUnit, onOpenUnit }) {
                                 onOpenUnit(unit.unit);
                             }}
                             disabled={!allowed}
-                            className={`text-left bg-white rounded-3xl border p-6 transition shadow-sm ${
+                            className={`group text-left bg-white/90 backdrop-blur-xl rounded-[28px] border p-6 transition-all shadow-sm ${
                                 allowed
-                                    ? 'border-slate-100 hover:shadow-md hover:-translate-y-0.5 cursor-pointer'
-                                    : 'border-slate-200 cursor-not-allowed'
+                                    ? 'border-white hover:shadow-xl hover:-translate-y-1 cursor-pointer'
+                                    : 'border-slate-200 cursor-not-allowed opacity-80'
                             }`}
                         >
                             <div className="flex items-start justify-between gap-4">
                                 <div>
-                                    <div className="inline-flex items-center justify-center w-13 h-13 rounded-2xl bg-red-50 text-red-700">
-                                        <Building2 size={26} />
+                                    <div className={`inline-flex items-center justify-center w-14 h-14 rounded-2xl ${
+                                        allowed
+                                            ? 'bg-red-50 text-red-700 group-hover:bg-[#d71920] group-hover:text-white'
+                                            : 'bg-slate-100 text-slate-500'
+                                    } transition`}>
+                                        <Building2 size={27} />
                                     </div>
 
-                                    <h3 className="text-xl font-bold text-slate-950 mt-4">
+                                    <h3 className="text-xl font-black text-slate-950 mt-4">
                                         Unit {unit.nama_unit}
                                     </h3>
 
-                                    <p className="text-sm text-slate-500 mt-1">
+                                    <p className="text-sm text-slate-500 mt-1 leading-relaxed">
                                         {allowed
                                             ? 'Klik untuk melihat detail lengkap dashboard unit.'
                                             : 'Anda hanya dapat melihat ringkasan umum unit ini.'}
@@ -560,65 +713,47 @@ function UnitDashboardList({ units, user, canOpenUnit, onOpenUnit }) {
                                 </div>
 
                                 {!allowed ? (
-                                    <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 text-xs font-bold">
+                                    <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 text-xs font-black">
                                         <ShieldAlert size={13} />
                                         Ringkasan
                                     </div>
                                 ) : (
-                                    <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50 text-green-700 text-xs font-bold">
+                                    <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50 text-green-700 text-xs font-black">
                                         Detail
                                     </div>
                                 )}
                             </div>
 
                             <div className="grid grid-cols-3 gap-3 mt-6">
-                                <MiniStat
-                                    label="Open"
-                                    value={unit.total_pengajuan}
-                                />
-
-                                <MiniStat
-                                    label="Review"
-                                    value={unit.menunggu_tindak_lanjut}
-                                />
-
-                                <MiniStat
-                                    label="Close"
-                                    value={unit.total_completed}
-                                />
+                                <MiniStat label="Open" value={unit.total_pengajuan} />
+                                <MiniStat label="Review" value={unit.menunggu_tindak_lanjut} />
+                                <MiniStat label="Close" value={unit.total_completed} />
                             </div>
 
-                            <div className="mt-5 h-2 bg-slate-100 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-red-500 rounded-full transition-all"
-                                    style={{
-                                        width: `${
-                                            unit.total_pengajuan > 0
-                                                ? Math.round((unit.total_completed / unit.total_pengajuan) * 100)
-                                                : 0
-                                        }%`,
-                                    }}
-                                />
-                            </div>
+                            <div className="mt-5">
+                                <div className="flex items-center justify-between text-xs font-bold text-slate-500 mb-2">
+                                    <span>Progress Close</span>
+                                    <span>{progress}%</span>
+                                </div>
 
-                            <p className="text-xs text-slate-400 mt-2">
-                                Progress close:{' '}
-                                {unit.total_pengajuan > 0
-                                    ? Math.round((unit.total_completed / unit.total_pengajuan) * 100)
-                                    : 0}
-                                %
-                            </p>
+                                <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-gradient-to-r from-[#d71920] to-[#ff5964] rounded-full transition-all"
+                                        style={{ width: `${progress}%` }}
+                                    />
+                                </div>
+                            </div>
                         </button>
                     );
                 })}
             </div>
 
             {user?.unit !== 'sekpim' ? (
-                <div className="bg-blue-50 border border-blue-100 rounded-2xl px-5 py-4 text-sm text-blue-700">
+                <div className="bg-blue-50 border border-blue-100 rounded-3xl px-5 py-4 text-sm text-blue-700 leading-relaxed">
                     Anda dapat melihat ringkasan semua unit, tetapi hanya dapat membuka detail lengkap dashboard unit sendiri.
                 </div>
             ) : (
-                <div className="bg-red-50 border border-red-100 rounded-2xl px-5 py-4 text-sm text-red-700">
+                <div className="bg-red-50 border border-red-100 rounded-3xl px-5 py-4 text-sm text-red-700 leading-relaxed">
                     Admin SEKPiM dapat melihat ringkasan dan membuka detail lengkap seluruh unit.
                 </div>
             )}
@@ -633,62 +768,26 @@ function UnitDashboardDetail({
     onOpenRequest,
 }) {
     if (loading || !detail) {
-        return (
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6">
-                <p className="text-slate-500">Memuat detail unit...</p>
-            </div>
-        );
+        return <DetailSkeleton />;
     }
 
-    const stats = detail.stats || {};
-
-    const reviewTotal =
-        (stats.total_pending || 0) +
-        (stats.total_final_submitted || 0) +
-        (stats.total_revision || 0);
-
     return (
-        <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                <StatCard
-                    title="Open / Total Pengajuan"
-                    value={stats.total_pengajuan}
-                    icon={<FileText size={26} />}
-                    color="bg-blue-50 text-blue-700"
-                />
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <RequestTable
+                title="Pengajuan Terbaru"
+                description="Klik judul atau nomor surat untuk membuka detail pengajuan."
+                items={detail.latest_requests || []}
+                formatDate={formatDate}
+                onOpenRequest={onOpenRequest}
+            />
 
-                <StatCard
-                    title="Review / Tindak Lanjut"
-                    value={reviewTotal}
-                    icon={<Clock size={26} />}
-                    color="bg-yellow-50 text-yellow-700"
-                />
-
-                <StatCard
-                    title="Close / Selesai"
-                    value={stats.total_completed}
-                    icon={<CheckCircle size={26} />}
-                    color="bg-green-50 text-green-700"
-                />
-            </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                <RequestTable
-                    title="Pengajuan Terbaru"
-                    description="Klik judul atau nomor surat untuk membuka detail pengajuan."
-                    items={detail.latest_requests || []}
-                    formatDate={formatDate}
-                    onOpenRequest={onOpenRequest}
-                />
-
-                <RequestTable
-                    title="Review / Tindak Lanjut"
-                    description="Daftar pengajuan yang masih perlu diproses, diverifikasi, atau diperbaiki."
-                    items={detail.need_follow_up || []}
-                    formatDate={formatDate}
-                    onOpenRequest={onOpenRequest}
-                />
-            </div>
+            <RequestTable
+                title="Review / Tindak Lanjut"
+                description="Pengajuan yang masih perlu diproses, diverifikasi, atau diperbaiki."
+                items={detail.need_follow_up || []}
+                formatDate={formatDate}
+                onOpenRequest={onOpenRequest}
+            />
         </div>
     );
 }
@@ -696,34 +795,43 @@ function UnitDashboardDetail({
 function MiniStat({ label, value }) {
     return (
         <div className="rounded-2xl bg-slate-50 px-3 py-3">
-            <p className="text-xs font-semibold text-slate-500">
+            <p className="text-xs font-bold text-slate-500">
                 {label}
             </p>
 
-            <p className="text-xl font-bold text-slate-950 mt-1">
+            <p className="text-2xl font-black text-slate-950 mt-1">
                 {value || 0}
             </p>
         </div>
     );
 }
 
-function StatCard({ title, value, icon, color }) {
+function ExecutiveStatCard({ title, value, description, icon, tone }) {
+    const tones = {
+        blue: 'bg-blue-50 text-blue-700',
+        yellow: 'bg-yellow-50 text-yellow-700',
+        green: 'bg-green-50 text-green-700',
+        red: 'bg-red-50 text-red-700',
+    };
+
     return (
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5 hover:shadow-md transition">
-            <div className="flex items-center justify-between gap-4">
+        <div className="bg-white/90 backdrop-blur-xl rounded-[28px] border border-white shadow-sm p-5 hover:shadow-xl hover:-translate-y-0.5 transition-all">
+            <div className="flex items-start justify-between gap-4">
                 <div>
-                    <p className="text-sm font-semibold text-slate-500">
+                    <p className="text-sm font-bold text-slate-500">
                         {title}
                     </p>
 
-                    <h3 className="text-3xl font-bold text-slate-950 mt-2">
+                    <h3 className="text-4xl font-black text-slate-950 mt-2">
                         {value || 0}
                     </h3>
+
+                    <p className="text-sm text-slate-500 mt-2">
+                        {description}
+                    </p>
                 </div>
 
-                <div
-                    className={`w-12 h-12 rounded-2xl flex items-center justify-center ${color}`}
-                >
+                <div className={`w-13 h-13 rounded-2xl flex items-center justify-center ${tones[tone] || tones.red}`}>
                     {icon}
                 </div>
             </div>
@@ -739,38 +847,38 @@ function RequestTable({
     onOpenRequest,
 }) {
     return (
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6">
+        <div className="bg-white/90 backdrop-blur-xl rounded-[28px] shadow-sm border border-white p-6">
             <div className="mb-5">
-                <h3 className="text-lg font-bold text-slate-950">
+                <h3 className="text-lg font-black text-slate-950">
                     {title}
                 </h3>
 
-                <p className="text-sm text-slate-500 mt-1">
+                <p className="text-sm text-slate-500 mt-1 leading-relaxed">
                     {description}
                 </p>
             </div>
 
-            <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+            <div className="overflow-x-auto border border-slate-200 rounded-3xl no-scrollbar">
                 <table className="w-full min-w-[760px]">
                     <thead className="bg-slate-50">
                         <tr>
-                            <th className="text-left px-4 py-3 text-xs font-bold text-slate-600">
+                            <th className="text-left px-4 py-4 text-xs font-black text-slate-600">
                                 Judul / Nomor
                             </th>
 
-                            <th className="text-left px-4 py-3 text-xs font-bold text-slate-600">
-                                Pemohon
+                            <th className="text-left px-4 py-4 text-xs font-black text-slate-600">
+                                PIC
                             </th>
 
-                            <th className="text-left px-4 py-3 text-xs font-bold text-slate-600">
+                            <th className="text-left px-4 py-4 text-xs font-black text-slate-600">
                                 Tanggal
                             </th>
 
-                            <th className="text-left px-4 py-3 text-xs font-bold text-slate-600">
+                            <th className="text-left px-4 py-4 text-xs font-black text-slate-600">
                                 Status
                             </th>
 
-                            <th className="text-left px-4 py-3 text-xs font-bold text-slate-600">
+                            <th className="text-left px-4 py-4 text-xs font-black text-slate-600">
                                 Detail
                             </th>
                         </tr>
@@ -779,18 +887,18 @@ function RequestTable({
                     <tbody className="divide-y divide-slate-100">
                         {items.length > 0 ? (
                             items.map((item) => (
-                                <tr key={item.id} className="align-top hover:bg-slate-50/70 transition">
+                                <tr key={item.id} className="align-top hover:bg-slate-50/80 transition">
                                     <td className="px-4 py-4">
                                         <button
                                             type="button"
                                             onClick={() => onOpenRequest(item)}
                                             className="text-left group"
                                         >
-                                            <p className="font-bold text-sm text-slate-900 group-hover:text-red-700 transition">
+                                            <p className="font-black text-sm text-slate-900 group-hover:text-red-700 transition">
                                                 {item.judul_surat || '-'}
                                             </p>
 
-                                            <p className="text-xs font-bold text-red-700 mt-1 group-hover:underline">
+                                            <p className="text-xs font-black text-red-700 mt-1 group-hover:underline">
                                                 {item.nomor_surat || 'Nomor belum tersedia'}
                                             </p>
 
@@ -801,12 +909,12 @@ function RequestTable({
                                     </td>
 
                                     <td className="px-4 py-4">
-                                        <p className="text-sm font-semibold text-slate-700">
+                                        <p className="text-sm font-bold text-slate-700">
                                             {item.nama_pic_unit_pemohon || item.user?.name || '-'}
                                         </p>
 
-                                        <p className="text-xs text-slate-400 mt-1 capitalize">
-                                            PIC Unit Pemohon
+                                        <p className="text-xs text-slate-400 mt-1">
+                                            {item.user?.unit ? `Unit ${item.user.unit}` : 'PIC Unit'}
                                         </p>
                                     </td>
 
@@ -822,7 +930,7 @@ function RequestTable({
                                         <button
                                             type="button"
                                             onClick={() => onOpenRequest(item)}
-                                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+                                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
                                         >
                                             <Eye size={14} />
                                             Buka
@@ -832,7 +940,7 @@ function RequestTable({
                             ))
                         ) : (
                             <tr>
-                                <td colSpan="5" className="px-4 py-8 text-center text-slate-500 text-sm">
+                                <td colSpan="5" className="px-4 py-10 text-center text-slate-500 text-sm">
                                     Tidak ada data.
                                 </td>
                             </tr>
@@ -863,16 +971,16 @@ function RequestDetailModal({
     const finalDownloadUrl = `/nomor-surat/${item.id}/download-final`;
 
     return (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4 py-8">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center px-4 py-8">
+            <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto no-scrollbar">
                 <div className="p-6 md:p-7 border-b border-slate-100">
                     <div className="flex items-start justify-between gap-4">
                         <div>
-                            <p className="text-sm font-semibold text-red-700">
+                            <p className="text-sm font-black text-red-700">
                                 Detail Pengajuan Surat
                             </p>
 
-                            <h3 className="text-xl font-bold text-slate-950 mt-1">
+                            <h3 className="text-2xl font-black text-slate-950 mt-1">
                                 {item.judul_surat || '-'}
                             </h3>
 
@@ -884,7 +992,7 @@ function RequestDetailModal({
                         <button
                             type="button"
                             onClick={onClose}
-                            className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
+                            className="w-11 h-11 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black transition"
                         >
                             ×
                         </button>
@@ -893,98 +1001,41 @@ function RequestDetailModal({
 
                 <div className="p-6 md:p-7 space-y-6">
                     <div>
-                        <p className="text-sm font-bold text-slate-800 mb-3">
+                        <p className="text-sm font-black text-slate-800 mb-3">
                             Identitas Surat
                         </p>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <InfoBox
-                                label="Nomor Surat"
-                                value={item.nomor_surat || 'Nomor belum tersedia'}
-                                highlight
-                            />
-
-                            <InfoBox
-                                label="Status Pengajuan"
-                                customValue={<BadgeStatus status={item.status} />}
-                            />
-
-                            <InfoBox
-                                label="Tanggal Surat"
-                                value={formatDate(item.tanggal_surat)}
-                            />
-
-                            <InfoBox
-                                label="Status Tanggal"
-                                value={formatStatusTanggal(item.status_tanggal)}
-                            />
-
-                            <InfoBox
-                                label="Kode Perihal"
-                                value={`${item.kode_perihal?.kode || '-'} - ${item.kode_perihal?.nama_perihal || '-'}`}
-                            />
-
-                            <InfoBox
-                                label="Kode Pemilik Proses"
-                                value={`${item.kode_pemilik?.kode || '-'} - ${item.kode_pemilik?.nama_pemilik || item.kode_pemilik?.unit || '-'}`}
-                            />
+                            <InfoBox label="Nomor Surat" value={item.nomor_surat || 'Nomor belum tersedia'} highlight />
+                            <InfoBox label="Status Pengajuan" customValue={<BadgeStatus status={item.status} />} />
+                            <InfoBox label="Tanggal Surat" value={formatDate(item.tanggal_surat)} />
+                            <InfoBox label="Status Tanggal" value={formatStatusTanggal(item.status_tanggal)} />
+                            <InfoBox label="Kode Perihal" value={`${item.kode_perihal?.kode || '-'} - ${item.kode_perihal?.nama_perihal || '-'}`} />
+                            <InfoBox label="Kode Pemilik Proses" value={`${item.kode_pemilik?.kode || '-'} - ${item.kode_pemilik?.nama_pemilik || item.kode_pemilik?.unit || '-'}`} />
                         </div>
                     </div>
 
                     <div>
-                        <p className="text-sm font-bold text-slate-800 mb-3">
+                        <p className="text-sm font-black text-slate-800 mb-3">
                             Pemohon dan Penanggung Jawab
                         </p>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <InfoBox
-                                label="Nama Akun Pemohon"
-                                value={item.user?.name || '-'}
-                            />
-
-                            <InfoBox
-                                label="Unit Pemohon"
-                                value={item.user?.unit || '-'}
-                            />
-
-                            <InfoBox
-                                label="Nama PIC Unit Pemohon"
-                                value={item.nama_pic_unit_pemohon || '-'}
-                                highlight
-                            />
-
-                            <InfoBox
-                                label="Penandatangan Surat / TTD"
-                                value={item.penandatangan_surat || '-'}
-                            />
+                            <InfoBox label="Nama Akun Pemohon" value={item.user?.name || '-'} />
+                            <InfoBox label="Unit Pemohon" value={item.user?.unit || '-'} />
+                            <InfoBox label="Nama PIC Unit Pemohon" value={item.nama_pic_unit_pemohon || '-'} highlight />
+                            <InfoBox label="Penandatangan Surat / TTD" value={item.penandatangan_surat || '-'} />
                         </div>
                     </div>
 
-                    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
-                        <p className="text-sm font-bold text-slate-700">
-                            Tujuan Surat
-                        </p>
-
-                        <p className="text-sm text-slate-600 mt-2 leading-relaxed">
-                            {item.tujuan_surat || '-'}
-                        </p>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <TextPanel title="Tujuan Surat" value={item.tujuan_surat || '-'} />
+                        <TextPanel title="Keterangan" value={item.keterangan || '-'} />
                     </div>
-
-                    {item.keterangan ? (
-                        <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
-                            <p className="text-sm font-bold text-slate-700">
-                                Keterangan
-                            </p>
-
-                            <p className="text-sm text-slate-600 mt-2 leading-relaxed">
-                                {item.keterangan}
-                            </p>
-                        </div>
-                    ) : null}
 
                     {item.revision_note ? (
-                        <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4">
-                            <p className="text-sm font-bold text-orange-700">
+                        <div className="bg-orange-50 border border-orange-100 rounded-3xl p-4">
+                            <p className="text-sm font-black text-orange-700">
                                 Catatan Revisi
                             </p>
 
@@ -995,15 +1046,15 @@ function RequestDetailModal({
                     ) : null}
 
                     {!isOwnRequest && user?.unit !== 'sekpim' ? (
-                        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
+                        <div className="bg-blue-50 border border-blue-100 rounded-3xl p-4">
                             <p className="text-sm text-blue-700 leading-relaxed">
                                 Pengajuan ini bukan milik akun Anda. Anda hanya dapat melihat informasi detail, tidak dapat mengunggah dokumen final.
                             </p>
                         </div>
                     ) : null}
 
-                    <div className="border border-slate-200 rounded-2xl p-4">
-                        <p className="text-sm font-bold text-slate-800 mb-4">
+                    <div className="border border-slate-200 rounded-3xl p-4">
+                        <p className="text-sm font-black text-slate-800 mb-4">
                             Aksi Dokumen
                         </p>
 
@@ -1018,7 +1069,7 @@ function RequestDetailModal({
                                         downloadUrl: awalDownloadUrl,
                                         filePath: item.file_dokumen,
                                     })}
-                                    className="inline-flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+                                    className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-black bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
                                 >
                                     <Eye size={16} />
                                     Lihat Dokumen Awal
@@ -1035,7 +1086,7 @@ function RequestDetailModal({
                                         downloadUrl: finalDownloadUrl,
                                         filePath: item.file_dokumen_final,
                                     })}
-                                    className="inline-flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 transition"
+                                    className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-black bg-blue-50 hover:bg-blue-100 text-blue-700 transition"
                                 >
                                     <Eye size={16} />
                                     Lihat Dokumen Final
@@ -1046,7 +1097,7 @@ function RequestDetailModal({
                                 <button
                                     type="button"
                                     onClick={() => onUploadFinal(item)}
-                                    className={`inline-flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition text-white ${
+                                    className={`inline-flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-black transition text-white ${
                                         item.status === 'revision'
                                             ? 'bg-orange-500 hover:bg-orange-600'
                                             : 'bg-[#d71920] hover:bg-[#bd1118]'
@@ -1083,15 +1134,15 @@ function FilePreviewModal({
     const isImage = ['jpg', 'jpeg', 'png'].includes(extension);
 
     return (
-        <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center px-4 py-8">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center px-4 py-8">
+            <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-hidden flex flex-col">
                 <div className="p-5 md:p-6 border-b border-slate-100 flex items-start justify-between gap-4">
                     <div>
-                        <p className="text-sm font-semibold text-red-700">
+                        <p className="text-sm font-black text-red-700">
                             {file.title}
                         </p>
 
-                        <h3 className="text-lg font-bold text-slate-950 mt-1">
+                        <h3 className="text-lg font-black text-slate-950 mt-1">
                             {file.label}
                         </h3>
 
@@ -1105,34 +1156,34 @@ function FilePreviewModal({
                     <button
                         type="button"
                         onClick={onClose}
-                        className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition"
+                        className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black transition"
                     >
                         ×
                     </button>
                 </div>
 
-                <div className="p-4 md:p-5 bg-slate-50 flex-1 overflow-auto">
+                <div className="p-4 md:p-5 bg-slate-50 flex-1 overflow-auto no-scrollbar">
                     {canInlinePreview ? (
                         isImage ? (
-                            <div className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center justify-center min-h-[60vh]">
+                            <div className="bg-white rounded-3xl border border-slate-200 p-4 flex items-center justify-center min-h-[60vh]">
                                 <img
                                     src={file.previewUrl}
                                     alt={file.label}
-                                    className="max-w-full max-h-[70vh] rounded-xl object-contain"
+                                    className="max-w-full max-h-[70vh] rounded-2xl object-contain"
                                 />
                             </div>
                         ) : (
                             <iframe
                                 src={file.previewUrl}
                                 title={file.label}
-                                className="w-full h-[70vh] bg-white rounded-2xl border border-slate-200"
+                                className="w-full h-[70vh] bg-white rounded-3xl border border-slate-200"
                             />
                         )
                     ) : (
-                        <div className="bg-white rounded-2xl border border-slate-200 p-8 min-h-[50vh] flex flex-col items-center justify-center text-center">
+                        <div className="bg-white rounded-3xl border border-slate-200 p-8 min-h-[50vh] flex flex-col items-center justify-center text-center">
                             <FileText size={56} className="text-slate-300" />
 
-                            <h4 className="text-lg font-bold text-slate-800 mt-4">
+                            <h4 className="text-lg font-black text-slate-800 mt-4">
                                 Preview tidak tersedia
                             </h4>
 
@@ -1152,7 +1203,7 @@ function FilePreviewModal({
                         <button
                             type="button"
                             onClick={() => window.open(file.previewUrl, '_blank')}
-                            className="inline-flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+                            className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-black bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
                         >
                             <ExternalLink size={16} />
                             Buka Tab Baru
@@ -1161,7 +1212,7 @@ function FilePreviewModal({
                         <button
                             type="button"
                             onClick={() => openDownload(file.downloadUrl)}
-                            className="inline-flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold bg-[#d71920] hover:bg-[#bd1118] text-white transition"
+                            className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-black bg-[#d71920] hover:bg-[#bd1118] text-white transition"
                         >
                             <Download size={16} />
                             Download
@@ -1175,20 +1226,85 @@ function FilePreviewModal({
 
 function InfoBox({ label, value, customValue, highlight = false }) {
     return (
-        <div className="bg-white border border-slate-200 rounded-2xl p-4">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+        <div className="bg-white border border-slate-200 rounded-3xl p-4">
+            <p className="text-xs font-black text-slate-500 uppercase tracking-wide">
                 {label}
             </p>
 
-            <div
-                className={`mt-2 text-sm font-bold ${
-                    highlight ? 'text-red-700' : 'text-slate-800'
-                }`}
-            >
+            <div className={`mt-2 text-sm font-black ${highlight ? 'text-red-700' : 'text-slate-800'}`}>
                 {customValue || value || '-'}
             </div>
         </div>
     );
+}
+
+function TextPanel({ title, value }) {
+    return (
+        <div className="bg-slate-50 border border-slate-100 rounded-3xl p-4">
+            <p className="text-sm font-black text-slate-700">
+                {title}
+            </p>
+
+            <p className="text-sm text-slate-600 mt-2 leading-relaxed">
+                {value}
+            </p>
+        </div>
+    );
+}
+
+function EmptyState({ icon, title, description }) {
+    return (
+        <div className="bg-white/90 backdrop-blur-xl rounded-[28px] shadow-sm border border-white p-10 text-center">
+            <div className="w-16 h-16 rounded-3xl bg-slate-50 text-slate-300 flex items-center justify-center mx-auto">
+                {icon}
+            </div>
+
+            <h3 className="text-xl font-black text-slate-900 mt-5">
+                {title}
+            </h3>
+
+            <p className="text-slate-500 mt-2 max-w-xl mx-auto leading-relaxed">
+                {description}
+            </p>
+        </div>
+    );
+}
+
+function DashboardSkeleton() {
+    return (
+        <div className="space-y-6 animate-pulse">
+            <div className="h-64 bg-white rounded-[32px]"></div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+                <div className="h-32 bg-white rounded-[28px]"></div>
+                <div className="h-32 bg-white rounded-[28px]"></div>
+                <div className="h-32 bg-white rounded-[28px]"></div>
+                <div className="h-32 bg-white rounded-[28px]"></div>
+            </div>
+
+            <div className="h-40 bg-white rounded-[28px]"></div>
+        </div>
+    );
+}
+
+function DetailSkeleton() {
+    return (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 animate-pulse">
+            <div className="h-80 bg-white rounded-[28px]"></div>
+            <div className="h-80 bg-white rounded-[28px]"></div>
+        </div>
+    );
+}
+
+function calculateDetailProgress(detail) {
+    if (!detail?.stats) return 0;
+
+    const total = detail.stats.total_pengajuan || 0;
+    const completed = detail.stats.total_completed || 0;
+
+    if (total <= 0) return 0;
+
+    return Math.round((completed / total) * 100);
 }
 
 export default DashboardPage;

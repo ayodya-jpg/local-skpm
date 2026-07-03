@@ -2,8 +2,210 @@
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../**/*.js';
+@source '../**/*.jsx';
 
 @theme {
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+/* ================================
+   Global Smooth UI
+================================ */
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family:
+        'Instrument Sans',
+        ui-sans-serif,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+    background: #f4f6fa;
+}
+
+/* ================================
+   Hide Scrollbar Global
+   Scroll tetap bisa jalan,
+   tapi tanda scrollbar tidak terlihat
+================================ */
+
+html,
+body {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+    display: none;
+}
+
+* {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+}
+
+/* Class khusus kalau ingin dipakai manual */
+.no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+}
+
+/* ================================
+   Selection
+================================ */
+
+::selection {
+    background: rgba(215, 25, 32, 0.18);
+    color: #7f0b12;
+}
+
+/* ================================
+   Input Enhancement
+================================ */
+
+input,
+select,
+textarea,
+button {
+    font-family: inherit;
+}
+
+input,
+select,
+textarea {
+    transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease,
+        background-color 0.2s ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+}
+
+/* ================================
+   Animation
+================================ */
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes scaleIn {
+    from {
+        opacity: 0;
+        transform: scale(0.98);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes slideInLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-12px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.animate-fade-in {
+    animation: fadeIn 0.25s ease-in-out;
+}
+
+.animate-scale-in {
+    animation: scaleIn 0.2s ease-in-out;
+}
+
+.animate-slide-in-left {
+    animation: slideInLeft 0.25s ease-in-out;
+}
+
+/* ================================
+   Table Enhancement
+================================ */
+
+table {
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+th {
+    white-space: nowrap;
+}
+
+td {
+    vertical-align: top;
+}
+
+/* ================================
+   Utility
+================================ */
+
+.glass-card {
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(18px);
+    border: 1px solid rgba(255, 255, 255, 0.72);
+}
+
+.text-balance {
+    text-wrap: balance;
+}
+
+.form-control {
+    width: 100%;
+    border: 1px solid #e2e8f0;
+    border-radius: 1rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #334155;
+    background: #ffffff;
+}
+
+.form-control::placeholder {
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.form-control:focus {
+    border-color: #d71920;
+    box-shadow: 0 0 0 3px rgba(215, 25, 32, 0.12);
 }
