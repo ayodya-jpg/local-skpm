@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Swal from 'sweetalert2';
 import {
+    AlertTriangle,
     CalendarDays,
     CheckCircle,
     Clock,
     Download,
+    Edit3,
     Eye,
     ExternalLink,
     FileText,
@@ -41,6 +43,17 @@ function RiwayatNomorSuratPage() {
         fetchData();
     }, []);
 
+    const getRowsFromResponse = (response) => {
+        const rows =
+            response.nomor_surats ||
+            response.nomor_surat_requests ||
+            response.requests ||
+            response.data ||
+            [];
+
+        return Array.isArray(rows) ? rows : [];
+    };
+
     const fetchData = async (silent = false) => {
         try {
             if (silent) {
@@ -57,15 +70,9 @@ function RiwayatNomorSuratPage() {
             if (filter.search) params.append('search', filter.search);
 
             const response = await apiGet(`/nomor-surat?${params.toString()}`);
+            const rows = getRowsFromResponse(response);
 
-            const rows =
-                response.nomor_surats ||
-                response.nomor_surat_requests ||
-                response.requests ||
-                response.data ||
-                [];
-
-            setItems(Array.isArray(rows) ? rows : []);
+            setItems(rows);
         } catch (error) {
             Swal.fire({
                 icon: 'error',
@@ -76,6 +83,27 @@ function RiwayatNomorSuratPage() {
         } finally {
             setLoading(false);
             setRefreshing(false);
+        }
+    };
+
+    const refreshSelectedRequest = async () => {
+        try {
+            const response = await apiGet('/nomor-surat');
+            const rows = getRowsFromResponse(response);
+
+            setItems(rows);
+
+            if (selectedRequest) {
+                const freshItem = rows.find((item) => item.id === selectedRequest.id);
+
+                if (freshItem) {
+                    setSelectedRequest(freshItem);
+                } else {
+                    setSelectedRequest(null);
+                }
+            }
+        } catch (error) {
+            fetchData(true);
         }
     };
 
@@ -105,31 +133,6 @@ function RiwayatNomorSuratPage() {
         }, 100);
     };
 
-    const refreshSelectedRequest = async () => {
-        try {
-            const response = await apiGet('/nomor-surat');
-
-            const rows =
-                response.nomor_surats ||
-                response.nomor_surat_requests ||
-                response.requests ||
-                response.data ||
-                [];
-
-            setItems(Array.isArray(rows) ? rows : []);
-
-            if (selectedRequest) {
-                const freshItem = rows.find((item) => item.id === selectedRequest.id);
-
-                if (freshItem) {
-                    setSelectedRequest(freshItem);
-                }
-            }
-        } catch (error) {
-            console.log(error);
-        }
-    };
-
     const handleUploadFinal = async (item) => {
         const isRevision = item.status === 'revision';
 
@@ -140,20 +143,25 @@ function RiwayatNomorSuratPage() {
                 <div style="text-align:left">
                     ${
                         isRevision
-                            ? '<p>Dokumen final sebelumnya diminta revisi. Silakan upload ulang dokumen yang sudah diperbaiki.</p>'
+                            ? '<p>Dokumen final sebelumnya diminta revisi. Silakan upload ulang dokumen final yang sudah diperbaiki.</p>'
                             : '<p>Upload dokumen final yang sudah diberi nomor surat.</p>'
                     }
-                    <br/>
-                    <b>${item.nomor_surat || '-'}</b>
+
                     ${
                         item.revision_note
-                            ? `<div style="margin-top:12px;padding:10px;border-radius:10px;background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;font-size:13px">
-                                <b>Catatan revisi:</b><br/>${item.revision_note}
+                            ? `<div style="margin-top:12px;padding:12px;border-radius:14px;background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;font-size:13px">
+                                <b>Catatan revisi dari SEKPiM:</b><br/>${item.revision_note}
                             </div>`
                             : ''
                     }
+
                     <br/>
+                    <b>Nomor Surat:</b> ${item.nomor_surat || '-'}<br/>
+                    <b>Perihal:</b> ${item.judul_surat || '-'}
+                    <br/><br/>
+
                     <input id="file_dokumen_final" type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" class="swal2-file" />
+
                     <p style="font-size:12px;color:#64748b;margin-top:8px">
                         Format: PDF, DOC, DOCX, JPG, JPEG, PNG. Maksimal 5MB.
                     </p>
@@ -200,13 +208,160 @@ function RiwayatNomorSuratPage() {
                 text: isRevision
                     ? 'Dokumen final revisi berhasil diupload dan menunggu pengecekan ulang SEKPiM.'
                     : 'Dokumen final berhasil diupload dan menunggu pengecekan SEKPiM.',
-                timer: 2200,
+                timer: 2400,
                 showConfirmButton: false,
             });
         } catch (error) {
             Swal.fire({
                 icon: 'error',
                 title: 'Gagal Upload',
+                text: getErrorMessage(error),
+                confirmButtonColor: '#d71920',
+            });
+        }
+    };
+
+    const handleReviseRequest = async (item) => {
+        const result = await Swal.fire({
+            icon: 'warning',
+            title: 'Perbaiki Pengajuan',
+            width: 760,
+            html: `
+                <div style="text-align:left">
+                    ${
+                        item.revision_note
+                            ? `<div style="margin-bottom:16px;padding:12px;border-radius:14px;background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;font-size:13px">
+                                <b>Catatan revisi dari SEKPiM:</b><br/>${item.revision_note}
+                            </div>`
+                            : ''
+                    }
+
+                    <label style="font-size:12px;font-weight:800;color:#475569">Tanggal Surat</label>
+                    <input id="tanggal_surat" type="date" class="swal2-input" style="width:100%;margin:6px 0 12px 0" value="${formatInputDate(item.tanggal_surat)}" />
+
+                    <label style="font-size:12px;font-weight:800;color:#475569">Status Tanggal</label>
+                    <select id="status_tanggal" class="swal2-input" style="width:100%;margin:6px 0 12px 0">
+                        <option value="ondate" ${item.status_tanggal === 'ondate' ? 'selected' : ''}>On Date</option>
+                        <option value="backdate" ${item.status_tanggal === 'backdate' ? 'selected' : ''}>Back Date</option>
+                    </select>
+
+                    <label style="font-size:12px;font-weight:800;color:#475569">Judul Surat</label>
+                    <input id="judul_surat" type="text" class="swal2-input" style="width:100%;margin:6px 0 12px 0" value="${escapeHtml(item.judul_surat || '')}" />
+
+                    <label style="font-size:12px;font-weight:800;color:#475569">Tujuan Surat</label>
+                    <input id="tujuan_surat" type="text" class="swal2-input" style="width:100%;margin:6px 0 12px 0" value="${escapeHtml(item.tujuan_surat || '')}" />
+
+                    <label style="font-size:12px;font-weight:800;color:#475569">Nama PIC Unit Pemohon</label>
+                    <input id="nama_pic_unit_pemohon" type="text" class="swal2-input" style="width:100%;margin:6px 0 12px 0" value="${escapeHtml(item.nama_pic_unit_pemohon || '')}" />
+
+                    <label style="font-size:12px;font-weight:800;color:#475569">Penandatangan Surat</label>
+                    <input id="penandatangan_surat" type="text" class="swal2-input" style="width:100%;margin:6px 0 12px 0" value="${escapeHtml(item.penandatangan_surat || '')}" />
+
+                    <label style="font-size:12px;font-weight:800;color:#475569">Keterangan</label>
+                    <textarea id="keterangan" class="swal2-textarea" style="width:100%;margin:6px 0 12px 0">${escapeHtml(item.keterangan || '')}</textarea>
+
+                    <label style="font-size:12px;font-weight:800;color:#475569">Upload Ulang Dokumen Awal Jika Diperlukan</label>
+                    <input id="file_dokumen" type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" class="swal2-file" style="width:100%;margin:6px 0 0 0" />
+
+                    <p style="font-size:12px;color:#64748b;margin-top:8px">
+                        Kosongkan file jika tidak ingin mengganti dokumen awal. Format PDF, DOC, DOCX, JPG, JPEG, PNG. Maksimal 5MB.
+                    </p>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Kirim Revisi',
+            cancelButtonText: 'Batal',
+            confirmButtonColor: '#d71920',
+            cancelButtonColor: '#64748b',
+            preConfirm: () => {
+                const tanggalSurat = document.getElementById('tanggal_surat')?.value;
+                const statusTanggal = document.getElementById('status_tanggal')?.value;
+                const judulSurat = document.getElementById('judul_surat')?.value?.trim();
+                const tujuanSurat = document.getElementById('tujuan_surat')?.value?.trim();
+                const namaPic = document.getElementById('nama_pic_unit_pemohon')?.value?.trim();
+                const penandatangan = document.getElementById('penandatangan_surat')?.value?.trim();
+                const keterangan = document.getElementById('keterangan')?.value?.trim();
+                const file = document.getElementById('file_dokumen')?.files?.[0];
+
+                if (!tanggalSurat) {
+                    Swal.showValidationMessage('Tanggal surat wajib diisi.');
+                    return false;
+                }
+
+                if (!statusTanggal) {
+                    Swal.showValidationMessage('Status tanggal wajib dipilih.');
+                    return false;
+                }
+
+                if (!judulSurat) {
+                    Swal.showValidationMessage('Judul surat wajib diisi.');
+                    return false;
+                }
+
+                if (!tujuanSurat) {
+                    Swal.showValidationMessage('Tujuan surat wajib diisi.');
+                    return false;
+                }
+
+                if (!namaPic) {
+                    Swal.showValidationMessage('Nama PIC unit pemohon wajib diisi.');
+                    return false;
+                }
+
+                if (!penandatangan) {
+                    Swal.showValidationMessage('Penandatangan surat wajib diisi.');
+                    return false;
+                }
+
+                if (file && file.size > 5 * 1024 * 1024) {
+                    Swal.showValidationMessage('Ukuran file maksimal 5MB.');
+                    return false;
+                }
+
+                return {
+                    tanggalSurat,
+                    statusTanggal,
+                    judulSurat,
+                    tujuanSurat,
+                    namaPic,
+                    penandatangan,
+                    keterangan,
+                    file,
+                };
+            },
+        });
+
+        if (!result.isConfirmed || !result.value) return;
+
+        const formData = new FormData();
+        formData.append('tanggal_surat', result.value.tanggalSurat);
+        formData.append('status_tanggal', result.value.statusTanggal);
+        formData.append('judul_surat', result.value.judulSurat);
+        formData.append('tujuan_surat', result.value.tujuanSurat);
+        formData.append('nama_pic_unit_pemohon', result.value.namaPic);
+        formData.append('penandatangan_surat', result.value.penandatangan);
+        formData.append('keterangan', result.value.keterangan || '');
+
+        if (result.value.file) {
+            formData.append('file_dokumen', result.value.file);
+        }
+
+        try {
+            await apiSendForm(`/nomor-surat/${item.id}/resubmit-revision`, 'POST', formData);
+
+            await refreshSelectedRequest();
+
+            Swal.fire({
+                icon: 'success',
+                title: 'Berhasil',
+                text: 'Revisi pengajuan berhasil dikirim ulang dan menunggu approval SEKPiM.',
+                timer: 2400,
+                showConfirmButton: false,
+            });
+        } catch (error) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Gagal Mengirim Revisi',
                 text: getErrorMessage(error),
                 confirmButtonColor: '#d71920',
             });
@@ -246,6 +401,18 @@ function RiwayatNomorSuratPage() {
         });
     };
 
+    const formatInputDate = (dateValue) => {
+        if (!dateValue) return '';
+
+        const date = new Date(dateValue);
+
+        if (Number.isNaN(date.getTime())) {
+            return String(dateValue).slice(0, 10);
+        }
+
+        return date.toISOString().slice(0, 10);
+    };
+
     const formatStatusTanggal = (statusTanggal) => {
         const labels = {
             ondate: 'On Date',
@@ -253,6 +420,15 @@ function RiwayatNomorSuratPage() {
         };
 
         return labels[statusTanggal] || '-';
+    };
+
+    const escapeHtml = (value) => {
+        return String(value)
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
     };
 
     const years = [
@@ -284,6 +460,8 @@ function RiwayatNomorSuratPage() {
                 item.penandatangan_surat,
                 item.kode_perihal?.kode,
                 item.kode_pemilik?.kode,
+                item.revision_note,
+                item.rejected_reason,
             ]
                 .filter(Boolean)
                 .join(' ')
@@ -329,11 +507,11 @@ function RiwayatNomorSuratPage() {
                             </div>
 
                             <h2 className="text-2xl md:text-4xl font-black tracking-tight mt-5">
-                                Pantau Progres Pengajuan Anda
+                                Pantau dan Perbaiki Pengajuan Anda
                             </h2>
 
                             <p className="text-white/75 mt-3 max-w-2xl leading-relaxed">
-                                Lihat status pengajuan nomor surat, dokumen awal, dokumen final, catatan revisi, hingga status penyelesaian dari SEKPiM.
+                                Lihat status pengajuan nomor surat, catatan revisi dari SEKPiM, upload dokumen final, dan kirim ulang revisi pengajuan.
                             </p>
                         </div>
 
@@ -353,7 +531,7 @@ function RiwayatNomorSuratPage() {
                             </div>
 
                             <p className="text-xs text-white/60 mt-3">
-                                Berdasarkan data pengajuan yang dapat Anda akses.
+                                Revisi yang dikirim SEKPiM dapat diperbaiki dari halaman ini.
                             </p>
                         </div>
                     </div>
@@ -361,40 +539,11 @@ function RiwayatNomorSuratPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-5">
-                <StatCard
-                    title="Total"
-                    value={stats.total}
-                    icon={<FileText size={23} />}
-                    tone="blue"
-                />
-
-                <StatCard
-                    title="Pending"
-                    value={stats.pending}
-                    icon={<Clock size={23} />}
-                    tone="yellow"
-                />
-
-                <StatCard
-                    title="Approved"
-                    value={stats.approved}
-                    icon={<Send size={23} />}
-                    tone="green"
-                />
-
-                <StatCard
-                    title="Revisi"
-                    value={stats.revision}
-                    icon={<RefreshCcw size={23} />}
-                    tone="orange"
-                />
-
-                <StatCard
-                    title="Completed"
-                    value={stats.completed}
-                    icon={<CheckCircle size={23} />}
-                    tone="red"
-                />
+                <StatCard title="Total" value={stats.total} icon={<FileText size={23} />} tone="blue" />
+                <StatCard title="Pending" value={stats.pending} icon={<Clock size={23} />} tone="yellow" />
+                <StatCard title="Approved" value={stats.approved} icon={<Send size={23} />} tone="green" />
+                <StatCard title="Revisi" value={stats.revision} icon={<RefreshCcw size={23} />} tone="orange" />
+                <StatCard title="Completed" value={stats.completed} icon={<CheckCircle size={23} />} tone="red" />
             </div>
 
             <div className="bg-white/90 backdrop-blur-xl border border-white shadow-sm rounded-[28px] p-5 md:p-6">
@@ -409,7 +558,7 @@ function RiwayatNomorSuratPage() {
                         </div>
 
                         <p className="text-sm text-slate-500 mt-1">
-                            Cari pengajuan berdasarkan nomor, perihal, PIC, status, bulan, atau tahun.
+                            Cari pengajuan berdasarkan nomor, perihal, PIC, status, catatan revisi, bulan, atau tahun.
                         </p>
                     </div>
 
@@ -431,7 +580,7 @@ function RiwayatNomorSuratPage() {
                                     value={filter.search}
                                     onChange={handleFilterChange}
                                     className="form-control pl-11"
-                                    placeholder="Cari nomor/perihal/PIC..."
+                                    placeholder="Cari nomor/perihal/PIC/catatan..."
                                 />
                             </div>
                         </div>
@@ -561,36 +710,17 @@ function RiwayatNomorSuratPage() {
                 {filteredItems.length > 0 ? (
                     <>
                         <div className="hidden xl:block overflow-x-auto border border-slate-200 rounded-3xl no-scrollbar">
-                            <table className="w-full min-w-[1100px]">
+                            <table className="w-full min-w-[1220px]">
                                 <thead className="bg-slate-50">
                                     <tr>
-                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">
-                                            No.
-                                        </th>
-
-                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">
-                                            Nomor / Perihal
-                                        </th>
-
-                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">
-                                            PIC / TTD
-                                        </th>
-
-                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">
-                                            Tanggal
-                                        </th>
-
-                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">
-                                            Status
-                                        </th>
-
-                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">
-                                            Dokumen
-                                        </th>
-
-                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">
-                                            Aksi
-                                        </th>
+                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">No.</th>
+                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">Nomor / Perihal</th>
+                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">PIC / TTD</th>
+                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">Tanggal</th>
+                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">Status</th>
+                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">Catatan</th>
+                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">Dokumen</th>
+                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">Aksi</th>
                                     </tr>
                                 </thead>
 
@@ -606,7 +736,7 @@ function RiwayatNomorSuratPage() {
                                                     {item.nomor_surat || 'Nomor belum tersedia'}
                                                 </p>
 
-                                                <p className="text-sm text-slate-600 mt-1 max-w-[320px] line-clamp-2">
+                                                <p className="text-sm text-slate-600 mt-1 max-w-[280px] line-clamp-2">
                                                     {item.judul_surat || '-'}
                                                 </p>
 
@@ -640,77 +770,23 @@ function RiwayatNomorSuratPage() {
                                             </td>
 
                                             <td className="px-4 py-4">
-                                                <div className="flex flex-col gap-2">
-                                                    {item.file_dokumen ? (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => openPreview({
-                                                                title: 'Preview Dokumen Awal',
-                                                                label: 'Dokumen Awal',
-                                                                previewUrl: `/nomor-surat/${item.id}/preview-awal`,
-                                                                downloadUrl: `/nomor-surat/${item.id}/download-awal`,
-                                                                filePath: item.file_dokumen,
-                                                            })}
-                                                            className="inline-flex items-center gap-1.5 text-xs font-black text-slate-600 hover:text-red-700 transition"
-                                                        >
-                                                            <Paperclip size={14} />
-                                                            Dokumen Awal
-                                                        </button>
-                                                    ) : (
-                                                        <span className="text-xs text-slate-400">
-                                                            Dokumen awal kosong
-                                                        </span>
-                                                    )}
-
-                                                    {item.file_dokumen_final ? (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => openPreview({
-                                                                title: 'Preview Dokumen Final',
-                                                                label: 'Dokumen Final',
-                                                                previewUrl: `/nomor-surat/${item.id}/preview-final`,
-                                                                downloadUrl: `/nomor-surat/${item.id}/download-final`,
-                                                                filePath: item.file_dokumen_final,
-                                                            })}
-                                                            className="inline-flex items-center gap-1.5 text-xs font-black text-blue-600 hover:text-blue-800 transition"
-                                                        >
-                                                            <Paperclip size={14} />
-                                                            Dokumen Final
-                                                        </button>
-                                                    ) : (
-                                                        <span className="text-xs text-slate-400">
-                                                            Final belum ada
-                                                        </span>
-                                                    )}
-                                                </div>
+                                                <NotePreview item={item} />
                                             </td>
 
                                             <td className="px-4 py-4">
-                                                <div className="flex flex-wrap gap-2">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setSelectedRequest(item)}
-                                                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black transition"
-                                                    >
-                                                        <Eye size={14} />
-                                                        Detail
-                                                    </button>
+                                                <DocumentButtons
+                                                    item={item}
+                                                    openPreview={openPreview}
+                                                />
+                                            </td>
 
-                                                    {['approved', 'revision'].includes(item.status) ? (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleUploadFinal(item)}
-                                                            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-white text-xs font-black transition ${
-                                                                item.status === 'revision'
-                                                                    ? 'bg-orange-500 hover:bg-orange-600'
-                                                                    : 'bg-[#d71920] hover:bg-[#bd1118]'
-                                                            }`}
-                                                        >
-                                                            <Upload size={14} />
-                                                            Upload Final
-                                                        </button>
-                                                    ) : null}
-                                                </div>
+                                            <td className="px-4 py-4">
+                                                <ActionButtons
+                                                    item={item}
+                                                    onOpen={() => setSelectedRequest(item)}
+                                                    onUploadFinal={() => handleUploadFinal(item)}
+                                                    onReviseRequest={() => handleReviseRequest(item)}
+                                                />
                                             </td>
                                         </tr>
                                     ))}
@@ -727,6 +803,7 @@ function RiwayatNomorSuratPage() {
                                     formatStatusTanggal={formatStatusTanggal}
                                     onOpen={() => setSelectedRequest(item)}
                                     onUploadFinal={() => handleUploadFinal(item)}
+                                    onReviseRequest={() => handleReviseRequest(item)}
                                 />
                             ))}
                         </div>
@@ -743,6 +820,7 @@ function RiwayatNomorSuratPage() {
                     formatStatusTanggal={formatStatusTanggal}
                     onClose={() => setSelectedRequest(null)}
                     onUploadFinal={handleUploadFinal}
+                    onReviseRequest={handleReviseRequest}
                     openPreview={openPreview}
                 />
             ) : null}
@@ -756,6 +834,149 @@ function RiwayatNomorSuratPage() {
                 />
             ) : null}
         </div>
+    );
+}
+
+function ActionButtons({
+    item,
+    onOpen,
+    onUploadFinal,
+    onReviseRequest,
+}) {
+    const isRevision = item.status === 'revision';
+    const isFinalRevision = isRevision && item.nomor_surat;
+    const isDataRevision = isRevision && !item.nomor_surat;
+
+    return (
+        <div className="flex flex-wrap gap-2">
+            <button
+                type="button"
+                onClick={onOpen}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black transition"
+            >
+                <Eye size={14} />
+                Detail
+            </button>
+
+            {item.status === 'approved' ? (
+                <button
+                    type="button"
+                    onClick={onUploadFinal}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#d71920] hover:bg-[#bd1118] text-white text-xs font-black transition"
+                >
+                    <Upload size={14} />
+                    Upload Final
+                </button>
+            ) : null}
+
+            {isFinalRevision ? (
+                <button
+                    type="button"
+                    onClick={onUploadFinal}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-black transition"
+                >
+                    <Upload size={14} />
+                    Upload Ulang
+                </button>
+            ) : null}
+
+            {isDataRevision ? (
+                <button
+                    type="button"
+                    onClick={onReviseRequest}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-black transition"
+                >
+                    <Edit3 size={14} />
+                    Perbaiki
+                </button>
+            ) : null}
+        </div>
+    );
+}
+
+function DocumentButtons({ item, openPreview }) {
+    return (
+        <div className="flex flex-col gap-2">
+            {item.file_dokumen ? (
+                <button
+                    type="button"
+                    onClick={() => openPreview({
+                        title: 'Preview Dokumen Awal',
+                        label: 'Dokumen Awal',
+                        previewUrl: `/nomor-surat/${item.id}/preview-awal`,
+                        downloadUrl: `/nomor-surat/${item.id}/download-awal`,
+                        filePath: item.file_dokumen,
+                    })}
+                    className="inline-flex items-center gap-1.5 text-xs font-black text-slate-600 hover:text-red-700 transition"
+                >
+                    <Paperclip size={14} />
+                    Dokumen Awal
+                </button>
+            ) : (
+                <span className="text-xs text-slate-400">
+                    Dokumen awal kosong
+                </span>
+            )}
+
+            {item.file_dokumen_final ? (
+                <button
+                    type="button"
+                    onClick={() => openPreview({
+                        title: 'Preview Dokumen Final',
+                        label: 'Dokumen Final',
+                        previewUrl: `/nomor-surat/${item.id}/preview-final`,
+                        downloadUrl: `/nomor-surat/${item.id}/download-final`,
+                        filePath: item.file_dokumen_final,
+                    })}
+                    className="inline-flex items-center gap-1.5 text-xs font-black text-blue-600 hover:text-blue-800 transition"
+                >
+                    <Paperclip size={14} />
+                    Dokumen Final
+                </button>
+            ) : (
+                <span className="text-xs text-slate-400">
+                    Final belum ada
+                </span>
+            )}
+        </div>
+    );
+}
+
+function NotePreview({ item }) {
+    if (item.revision_note) {
+        return (
+            <div className="max-w-[260px] rounded-2xl bg-orange-50 border border-orange-100 px-3 py-2">
+                <div className="flex items-center gap-1.5 text-orange-700 text-xs font-black">
+                    <AlertTriangle size={13} />
+                    Catatan Revisi
+                </div>
+
+                <p className="text-xs text-orange-700 mt-1 line-clamp-3 leading-relaxed">
+                    {item.revision_note}
+                </p>
+            </div>
+        );
+    }
+
+    if (item.rejected_reason) {
+        return (
+            <div className="max-w-[260px] rounded-2xl bg-red-50 border border-red-100 px-3 py-2">
+                <div className="flex items-center gap-1.5 text-red-700 text-xs font-black">
+                    <AlertTriangle size={13} />
+                    Alasan Reject
+                </div>
+
+                <p className="text-xs text-red-700 mt-1 line-clamp-3 leading-relaxed">
+                    {item.rejected_reason}
+                </p>
+            </div>
+        );
+    }
+
+    return (
+        <span className="inline-flex items-center px-3 py-2 rounded-2xl bg-slate-100 text-slate-400 text-xs font-black">
+            Tidak ada catatan
+        </span>
     );
 }
 
@@ -795,6 +1016,7 @@ function MobileRiwayatCard({
     formatStatusTanggal,
     onOpen,
     onUploadFinal,
+    onReviseRequest,
 }) {
     return (
         <div className="bg-white border border-slate-200 rounded-[28px] p-5 shadow-sm">
@@ -819,30 +1041,19 @@ function MobileRiwayatCard({
                 <SmallInfo label="Kode" value={`${item.kode_perihal?.kode || '-'} / ${item.kode_pemilik?.kode || '-'}`} />
             </div>
 
-            <div className="flex flex-wrap gap-2 mt-4">
-                <button
-                    type="button"
-                    onClick={onOpen}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black transition"
-                >
-                    <Eye size={14} />
-                    Detail
-                </button>
+            {(item.revision_note || item.rejected_reason) ? (
+                <div className="mt-4">
+                    <NotePreview item={item} />
+                </div>
+            ) : null}
 
-                {['approved', 'revision'].includes(item.status) ? (
-                    <button
-                        type="button"
-                        onClick={onUploadFinal}
-                        className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-white text-xs font-black transition ${
-                            item.status === 'revision'
-                                ? 'bg-orange-500 hover:bg-orange-600'
-                                : 'bg-[#d71920] hover:bg-[#bd1118]'
-                        }`}
-                    >
-                        <Upload size={14} />
-                        Upload Final
-                    </button>
-                ) : null}
+            <div className="flex flex-wrap gap-2 mt-4">
+                <ActionButtons
+                    item={item}
+                    onOpen={onOpen}
+                    onUploadFinal={onUploadFinal}
+                    onReviseRequest={onReviseRequest}
+                />
             </div>
         </div>
     );
@@ -854,9 +1065,12 @@ function RequestDetailModal({
     formatStatusTanggal,
     onClose,
     onUploadFinal,
+    onReviseRequest,
     openPreview,
 }) {
-    const canUploadFinal = ['approved', 'revision'].includes(item.status);
+    const isRevision = item.status === 'revision';
+    const isFinalRevision = isRevision && item.nomor_surat;
+    const isDataRevision = isRevision && !item.nomor_surat;
 
     return (
         <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center px-4 py-8">
@@ -873,7 +1087,7 @@ function RequestDetailModal({
                             </h3>
 
                             <p className="text-sm text-slate-500 mt-2">
-                                Periksa status, dokumen, dan catatan proses pengajuan nomor surat.
+                                Periksa status, dokumen, catatan revisi, dan tindak lanjuti pengajuan Anda.
                             </p>
                         </div>
 
@@ -888,6 +1102,30 @@ function RequestDetailModal({
                 </div>
 
                 <div className="p-6 md:p-7 space-y-6">
+                    {item.revision_note ? (
+                        <div className="bg-orange-50 border border-orange-100 rounded-3xl p-4">
+                            <p className="text-sm font-black text-orange-700">
+                                Catatan Revisi dari SEKPiM
+                            </p>
+
+                            <p className="text-sm text-orange-700 mt-2 leading-relaxed">
+                                {item.revision_note}
+                            </p>
+                        </div>
+                    ) : null}
+
+                    {item.rejected_reason ? (
+                        <div className="bg-red-50 border border-red-100 rounded-3xl p-4">
+                            <p className="text-sm font-black text-red-700">
+                                Catatan / Alasan Reject
+                            </p>
+
+                            <p className="text-sm text-red-700 mt-2 leading-relaxed">
+                                {item.rejected_reason}
+                            </p>
+                        </div>
+                    ) : null}
+
                     <div>
                         <p className="text-sm font-black text-slate-800 mb-3">
                             Informasi Surat
@@ -920,30 +1158,6 @@ function RequestDetailModal({
                         <TextPanel title="Tujuan Surat" value={item.tujuan_surat || '-'} />
                         <TextPanel title="Keterangan" value={item.keterangan || '-'} />
                     </div>
-
-                    {item.revision_note ? (
-                        <div className="bg-orange-50 border border-orange-100 rounded-3xl p-4">
-                            <p className="text-sm font-black text-orange-700">
-                                Catatan Revisi
-                            </p>
-
-                            <p className="text-sm text-orange-700 mt-2 leading-relaxed">
-                                {item.revision_note}
-                            </p>
-                        </div>
-                    ) : null}
-
-                    {item.rejected_reason ? (
-                        <div className="bg-red-50 border border-red-100 rounded-3xl p-4">
-                            <p className="text-sm font-black text-red-700">
-                                Alasan Penolakan
-                            </p>
-
-                            <p className="text-sm text-red-700 mt-2 leading-relaxed">
-                                {item.rejected_reason}
-                            </p>
-                        </div>
-                    ) : null}
 
                     <div className="border border-slate-200 rounded-3xl p-4">
                         <p className="text-sm font-black text-slate-800 mb-4">
@@ -985,27 +1199,30 @@ function RequestDetailModal({
                                 </button>
                             ) : null}
 
-                            {canUploadFinal ? (
+                            {item.status === 'approved' || isFinalRevision ? (
                                 <button
                                     type="button"
                                     onClick={() => onUploadFinal(item)}
                                     className={`inline-flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-black transition text-white ${
-                                        item.status === 'revision'
+                                        isFinalRevision
                                             ? 'bg-orange-500 hover:bg-orange-600'
                                             : 'bg-[#d71920] hover:bg-[#bd1118]'
                                     }`}
                                 >
                                     <Upload size={16} />
-                                    {item.status === 'revision'
-                                        ? 'Upload Ulang Dokumen Final'
-                                        : 'Upload Dokumen Final'}
+                                    {isFinalRevision ? 'Upload Ulang Dokumen Final' : 'Upload Dokumen Final'}
                                 </button>
                             ) : null}
 
-                            {!item.file_dokumen && !item.file_dokumen_final && !canUploadFinal ? (
-                                <p className="text-sm text-slate-500">
-                                    Belum ada dokumen yang dapat ditampilkan pada status ini.
-                                </p>
+                            {isDataRevision ? (
+                                <button
+                                    type="button"
+                                    onClick={() => onReviseRequest(item)}
+                                    className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-black transition text-white bg-orange-500 hover:bg-orange-600"
+                                >
+                                    <Edit3 size={16} />
+                                    Perbaiki dan Kirim Ulang
+                                </button>
                             ) : null}
                         </div>
                     </div>

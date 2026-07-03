@@ -11,6 +11,7 @@ import {
     FileCheck,
     FileText,
     Filter,
+    MessageSquareWarning,
     Paperclip,
     RefreshCcw,
     Search,
@@ -35,12 +36,23 @@ function ApprovalNomorSuratPage() {
         search: '',
         status: 'pending',
         bulan: 'all',
-        tahun: String(currentDate.getFullYear()),
+        tahun: 'all',
     });
 
     useEffect(() => {
         fetchData();
     }, []);
+
+    const getRowsFromResponse = (response) => {
+        const rows =
+            response.nomor_surats ||
+            response.nomor_surat_requests ||
+            response.requests ||
+            response.data ||
+            [];
+
+        return Array.isArray(rows) ? rows : [];
+    };
 
     const fetchData = async (silent = false) => {
         try {
@@ -58,14 +70,9 @@ function ApprovalNomorSuratPage() {
             if (filter.search) params.append('search', filter.search);
 
             const response = await apiGet(`/nomor-surat?${params.toString()}`);
+            const rows = getRowsFromResponse(response);
 
-            const rows =
-                response.nomor_surat_requests ||
-                response.requests ||
-                response.data ||
-                [];
-
-            setItems(Array.isArray(rows) ? rows : []);
+            setItems(rows);
         } catch (error) {
             Swal.fire({
                 icon: 'error',
@@ -97,7 +104,7 @@ function ApprovalNomorSuratPage() {
             search: '',
             status: 'pending',
             bulan: 'all',
-            tahun: String(currentDate.getFullYear()),
+            tahun: 'all',
         });
 
         setTimeout(() => {
@@ -108,14 +115,9 @@ function ApprovalNomorSuratPage() {
     const refreshAfterAction = async () => {
         try {
             const response = await apiGet('/nomor-surat');
+            const rows = getRowsFromResponse(response);
 
-            const rows =
-                response.nomor_surat_requests ||
-                response.requests ||
-                response.data ||
-                [];
-
-            setItems(Array.isArray(rows) ? rows : []);
+            setItems(rows);
 
             if (selectedRequest) {
                 const freshItem = rows.find((item) => item.id === selectedRequest.id);
@@ -179,11 +181,20 @@ function ApprovalNomorSuratPage() {
         const result = await Swal.fire({
             icon: 'warning',
             title: 'Tolak Pengajuan?',
+            html: `
+                <div style="text-align:left;margin-bottom:12px">
+                    <p>Pengajuan akan ditolak dan pemohon dapat melihat alasan penolakan pada riwayat pengajuan.</p>
+                    <br/>
+                    <b>Perihal:</b> ${item.judul_surat || '-'}<br/>
+                    <b>PIC:</b> ${item.nama_pic_unit_pemohon || '-'}<br/>
+                    <b>Unit:</b> ${item.user?.unit || '-'}
+                </div>
+            `,
             input: 'textarea',
-            inputLabel: 'Alasan Penolakan',
-            inputPlaceholder: 'Tuliskan alasan penolakan agar pemohon memahami penyebabnya...',
+            inputLabel: 'Catatan / Alasan Penolakan',
+            inputPlaceholder: 'Contoh: Data pengajuan belum sesuai, tujuan surat belum jelas, atau dokumen tidak memenuhi ketentuan.',
             inputAttributes: {
-                rows: 4,
+                rows: 5,
             },
             showCancelButton: true,
             confirmButtonText: 'Ya, Tolak',
@@ -192,7 +203,7 @@ function ApprovalNomorSuratPage() {
             cancelButtonColor: '#64748b',
             inputValidator: (value) => {
                 if (!value) {
-                    return 'Alasan penolakan wajib diisi.';
+                    return 'Catatan penolakan wajib diisi.';
                 }
 
                 return null;
@@ -205,6 +216,7 @@ function ApprovalNomorSuratPage() {
             await apiSend(`/nomor-surat/${item.id}/reject`, 'POST', {
                 rejected_reason: result.value,
                 reason: result.value,
+                note: result.value,
             });
 
             await refreshAfterAction();
@@ -212,8 +224,8 @@ function ApprovalNomorSuratPage() {
             Swal.fire({
                 icon: 'success',
                 title: 'Berhasil',
-                text: 'Pengajuan berhasil ditolak.',
-                timer: 2000,
+                text: 'Pengajuan berhasil ditolak dan catatan penolakan tersimpan.',
+                timer: 2200,
                 showConfirmButton: false,
             });
         } catch (error) {
@@ -229,12 +241,21 @@ function ApprovalNomorSuratPage() {
     const handleRevision = async (item) => {
         const result = await Swal.fire({
             icon: 'warning',
-            title: 'Minta Revisi Dokumen?',
+            title: 'Minta Revisi Pengajuan?',
+            html: `
+                <div style="text-align:left;margin-bottom:12px">
+                    <p>Pengajuan akan dikembalikan ke pemohon dengan status <b>Revision</b>. Pemohon dapat melihat catatan revisi pada riwayat pengajuan.</p>
+                    <br/>
+                    <b>Perihal:</b> ${item.judul_surat || '-'}<br/>
+                    <b>PIC:</b> ${item.nama_pic_unit_pemohon || '-'}<br/>
+                    <b>Unit:</b> ${item.user?.unit || '-'}
+                </div>
+            `,
             input: 'textarea',
             inputLabel: 'Catatan Revisi',
-            inputPlaceholder: 'Tuliskan bagian dokumen final yang perlu diperbaiki...',
+            inputPlaceholder: 'Contoh: Perbaiki perihal surat, lengkapi tujuan surat, atau upload ulang dokumen final yang benar.',
             inputAttributes: {
-                rows: 4,
+                rows: 5,
             },
             showCancelButton: true,
             confirmButtonText: 'Kirim Revisi',
@@ -263,8 +284,8 @@ function ApprovalNomorSuratPage() {
             Swal.fire({
                 icon: 'success',
                 title: 'Berhasil',
-                text: 'Catatan revisi berhasil dikirim.',
-                timer: 2000,
+                text: 'Pengajuan berhasil dikirim untuk revisi dan catatan revisi tersimpan.',
+                timer: 2200,
                 showConfirmButton: false,
             });
         } catch (error) {
@@ -403,6 +424,8 @@ function ApprovalNomorSuratPage() {
                 item.user?.unit,
                 item.kode_perihal?.kode,
                 item.kode_pemilik?.kode,
+                item.revision_note,
+                item.rejected_reason,
             ]
                 .filter(Boolean)
                 .join(' ')
@@ -452,7 +475,7 @@ function ApprovalNomorSuratPage() {
                             </h2>
 
                             <p className="text-white/75 mt-3 max-w-2xl leading-relaxed">
-                                Review pengajuan masuk, setujui nomor surat, minta revisi dokumen final, tolak pengajuan, hingga menyelesaikan proses surat keluar.
+                                Review pengajuan masuk, setujui nomor surat, minta revisi dengan catatan, tolak pengajuan dengan alasan, hingga menyelesaikan proses surat keluar.
                             </p>
                         </div>
 
@@ -500,7 +523,7 @@ function ApprovalNomorSuratPage() {
                         </div>
 
                         <p className="text-sm text-slate-500 mt-1">
-                            Cari berdasarkan nomor, perihal, unit, PIC, status, bulan, atau tahun.
+                            Cari berdasarkan nomor, perihal, unit, PIC, status, catatan revisi, alasan reject, bulan, atau tahun.
                         </p>
                     </div>
 
@@ -522,7 +545,7 @@ function ApprovalNomorSuratPage() {
                                     value={filter.search}
                                     onChange={handleFilterChange}
                                     className="form-control pl-11"
-                                    placeholder="Cari nomor/perihal/unit/PIC..."
+                                    placeholder="Cari nomor/perihal/unit/PIC/catatan..."
                                 />
                             </div>
                         </div>
@@ -652,36 +675,17 @@ function ApprovalNomorSuratPage() {
                 {filteredItems.length > 0 ? (
                     <>
                         <div className="hidden xl:block overflow-x-auto border border-slate-200 rounded-3xl no-scrollbar">
-                            <table className="w-full min-w-[1200px]">
+                            <table className="w-full min-w-[1320px]">
                                 <thead className="bg-slate-50">
                                     <tr>
-                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">
-                                            No.
-                                        </th>
-
-                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">
-                                            Nomor / Perihal
-                                        </th>
-
-                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">
-                                            Unit / PIC
-                                        </th>
-
-                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">
-                                            Tanggal
-                                        </th>
-
-                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">
-                                            Status
-                                        </th>
-
-                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">
-                                            Dokumen
-                                        </th>
-
-                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">
-                                            Aksi
-                                        </th>
+                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">No.</th>
+                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">Nomor / Perihal</th>
+                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">Unit / PIC</th>
+                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">Tanggal</th>
+                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">Status</th>
+                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">Catatan</th>
+                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">Dokumen</th>
+                                        <th className="text-left px-4 py-4 text-xs font-black text-slate-600">Aksi</th>
                                     </tr>
                                 </thead>
 
@@ -697,7 +701,7 @@ function ApprovalNomorSuratPage() {
                                                     {item.nomor_surat || 'Nomor belum tersedia'}
                                                 </p>
 
-                                                <p className="text-sm text-slate-600 mt-1 max-w-[320px] line-clamp-2">
+                                                <p className="text-sm text-slate-600 mt-1 max-w-[300px] line-clamp-2">
                                                     {item.judul_surat || '-'}
                                                 </p>
 
@@ -732,6 +736,10 @@ function ApprovalNomorSuratPage() {
 
                                             <td className="px-4 py-4">
                                                 <BadgeStatus status={item.status} />
+                                            </td>
+
+                                            <td className="px-4 py-4">
+                                                <NotePreview item={item} />
                                             </td>
 
                                             <td className="px-4 py-4">
@@ -875,6 +883,15 @@ function ActionButtons({
 
                     <button
                         type="button"
+                        onClick={onRevision}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-black transition"
+                    >
+                        <RefreshCcw size={14} />
+                        Revisi
+                    </button>
+
+                    <button
+                        type="button"
                         onClick={onReject}
                         className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black transition"
                     >
@@ -906,6 +923,44 @@ function ActionButtons({
                 </>
             ) : null}
         </div>
+    );
+}
+
+function NotePreview({ item }) {
+    if (item.revision_note) {
+        return (
+            <div className="max-w-[260px] rounded-2xl bg-orange-50 border border-orange-100 px-3 py-2">
+                <div className="flex items-center gap-1.5 text-orange-700 text-xs font-black">
+                    <MessageSquareWarning size={13} />
+                    Catatan Revisi
+                </div>
+
+                <p className="text-xs text-orange-700 mt-1 line-clamp-3 leading-relaxed">
+                    {item.revision_note}
+                </p>
+            </div>
+        );
+    }
+
+    if (item.rejected_reason) {
+        return (
+            <div className="max-w-[260px] rounded-2xl bg-red-50 border border-red-100 px-3 py-2">
+                <div className="flex items-center gap-1.5 text-red-700 text-xs font-black">
+                    <XCircle size={13} />
+                    Alasan Reject
+                </div>
+
+                <p className="text-xs text-red-700 mt-1 line-clamp-3 leading-relaxed">
+                    {item.rejected_reason}
+                </p>
+            </div>
+        );
+    }
+
+    return (
+        <span className="inline-flex items-center px-3 py-2 rounded-2xl bg-slate-100 text-slate-400 text-xs font-black">
+            Tidak ada catatan
+        </span>
     );
 }
 
@@ -973,6 +1028,12 @@ function MobileApprovalCard({
                 <SmallInfo label="Status Tanggal" value={formatStatusTanggal(item.status_tanggal)} />
             </div>
 
+            {(item.revision_note || item.rejected_reason) ? (
+                <div className="mt-4">
+                    <NotePreview item={item} />
+                </div>
+            ) : null}
+
             <div className="flex flex-wrap gap-2 mt-4">
                 <ActionButtons
                     item={item}
@@ -1013,7 +1074,7 @@ function RequestDetailModal({
                             </h3>
 
                             <p className="text-sm text-slate-500 mt-2">
-                                Cek detail pengajuan, dokumen awal, dokumen final, dan tentukan tindakan admin.
+                                Cek detail pengajuan, dokumen awal, dokumen final, catatan revisi/reject, dan tentukan tindakan admin.
                             </p>
                         </div>
 
@@ -1076,7 +1137,7 @@ function RequestDetailModal({
                     {item.rejected_reason ? (
                         <div className="bg-red-50 border border-red-100 rounded-3xl p-4">
                             <p className="text-sm font-black text-red-700">
-                                Alasan Penolakan
+                                Catatan / Alasan Reject
                             </p>
 
                             <p className="text-sm text-red-700 mt-2 leading-relaxed">
